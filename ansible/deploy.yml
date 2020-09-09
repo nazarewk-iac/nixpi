@@ -1,0 +1,82 @@
+- hosts: nixpis
+  become: true
+  tasks:
+  - name: copy-over configuration.candidate.nix
+    copy:
+      dest: "{{ nixos_configuration_dir }}/configuration.candidate.nix"
+      src: "{{ cwd }}/configuration.nix"
+      force: true
+    register: candidate_configuration
+
+  - name: compare with the current configuration
+    stat:
+      path: "{{ nixos_configuration_dir }}/configuration.nix"
+      get_attributes: false
+      get_mime: false
+    register: old_configuration
+
+  - name: nix-channel --update
+    command:
+      argv:
+        - nix-channel
+        - --update
+    register: channel_update
+    changed_when: (channel_update.stdout + channel_update.stderr).strip() != 'unpacking channels...'
+
+  - when: channel_update.changed or old_configuration.stat.checksum != candidate_configuration.checksum
+    block:
+    - name: build candidate configuration
+      include_role:
+        name: cmd
+      vars:
+        argv:
+        - nixos-rebuild
+        - -I
+        - "{{ candidate_configuration.dest }}"
+        - build
+
+    - name: activate candidate configuration
+      include_role:
+        name: cmd
+      vars:
+        argv:
+        - nixos-rebuild
+        - -I
+        - "{{ candidate_configuration.dest }}"
+        - test
+
+    - name: make the new configuration boot default
+      include_role:
+        name: cmd
+      vars:
+        argv:
+        - nixos-rebuild
+        - -I
+        - "{{ candidate_configuration.dest }}"
+        - switch
+
+    - name: store as new configuration
+      copy:
+        dest: "{{ nixos_configuration_dir }}/configuration.nix"
+        remote_src: true
+        src: "{{ candidate_configuration.dest }}"
+        force: true
+        backup: true
+      register: new_configuration
+
+    - name: symlink old configuration to configuration.previous.nix
+      file:
+        state: link
+        dest: "{{ nixos_configuration_dir }}/configuration.previous.nix"
+        src: "{{ new_configuration.backup_file }}"
+        force: true
+
+    rescue:
+    - name: rollback channel update
+      when: channel_update.changed
+      command:
+        argv:
+        - nix-channel
+        - --rollback
+    - name: fail after update rollback
+      fail: {}

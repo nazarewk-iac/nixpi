@@ -1,0 +1,8 @@
+- name: "{{ argv }}"
+  command:
+    argv: "{{ argv }}"
+  register: cmd
+- debug: msg={{cmd.stdout}}
+  when: cmd.stdout
+- debug: msg={{cmd.stderr}}
+  when: cmd.stderr

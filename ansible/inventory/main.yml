@@ -1,0 +1,11 @@
+nixpis:
+  hosts:
+    nixpi-[0:2]: { }
+  children:
+    nix-caches:
+      hosts:
+        nixpi-[0:2]: { }
+
+local:
+  hosts: localhost
+

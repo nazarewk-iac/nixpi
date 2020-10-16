@@ -1,4 +1,4 @@
-- name: "{{ argv }}"
+- name: "running: {{ argv }}"
   command:
     argv: "{{ argv }}"
   register: cmd

@@ -1,0 +1,6 @@
+- name: Gather facts...
+  setup:
+  delegate_to: "{{ item }}"
+  delegate_facts: True
+  when: hostvars[item]['ansible_default_ipv4'] is not defined
+  loop: "{{ for_hosts | mandatory }}"

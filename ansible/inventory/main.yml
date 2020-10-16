@@ -9,3 +9,5 @@ nixpis:
 local:
   hosts: localhost
 
+image-builder:
+  hosts: localhost

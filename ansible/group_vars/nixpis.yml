@@ -1,2 +1,9 @@
 ansible_python_interpreter: /run/current-system/sw/bin/python
+nixos_channel: 'nixos-20.09'
+nixos_system_state_version: '20.09'
 nixos_configuration_dir: /etc/nixos
+nixos_configuration_candidate_dir: "{{ nixos_configuration_dir }}/configuration.candidate.d"
+
+all_cache_ips: "{{ groups['nix-caches'] | map('extract', hostvars, ['ansible_eth0', 'ipv4', 'address']) | list }}"
+other_cache_ips: "{{ all_cache_ips | select('match', '^(?!{})'.format(ansible_default_ipv4.address)) | list }}"
+other_caches: "{{ other_cache_ips | map('regex_replace', '^(.*)$', 'http://\\1:5000') | list }}"

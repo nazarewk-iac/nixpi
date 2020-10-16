@@ -1,30 +1,76 @@
 - hosts: nixpis
   become: true
+
+  gather_facts: false
+  pre_tasks:
+  - name: always gather facts for all nixpi hosts
+    import_role:
+      name: gather-facts
+    vars:
+      for_hosts: "{{ groups['nixpis'] }}"
+
   tasks:
-  - name: copy-over configuration.candidate.nix
-    copy:
-      dest: "{{ nixos_configuration_dir }}/configuration.candidate.nix"
-      src: "{{ cwd }}/configuration.nix"
+  - name: "ensure config was generated for the first time"
+    command:
+      creates: "{{ nixos_configuration_dir }}/*.nix"
+      argv:
+      - nixos-generate-config
+
+  - name: "ensure {{ nixos_configuration_candidate_dir }}"
+    file:
+      state: "{{ item }}"
+      dest: "{{ nixos_configuration_candidate_dir }}"
       force: true
-    register: candidate_configuration
+    loop:
+    - absent
+    - directory
 
-  - name: compare with the current configuration
-    stat:
-      path: "{{ nixos_configuration_dir }}/configuration.nix"
-      get_attributes: false
-      get_mime: false
-    register: old_configuration
+  - name: "render {{ source_configs_dir }} to {{ nixos_configuration_candidate_dir }}"
+    template:
+      dest: "{{ nixos_configuration_candidate_dir }}/{{ item }}"
+      src: "{{ source_configs_dir }}/{{ item }}"
+      force: true
+      validate: "nix-instantiate --parse-only '%s'"
+    loop: "{{ source_config_files }}"
 
-  - name: nix-channel --update
+  - name: "check nixos channel"
     command:
       argv:
-        - nix-channel
-        - --update
+      - nix-channel
+      - --list
+    register: old_channels
+    changed_when: False
+
+  - name: "set up nix channels"
+    command:
+      argv:
+      - nix-channel
+      - --add
+      - "{{ item.url }}"
+      - "{{ item.name }}"
+    when: |-
+      "{{ item.name }} {{ item.url }}" not in old_channels.stdout_lines
+    loop:
+    - { name: nixos , url: "https://nixos.org/channels/{{ nixos_channel }}" }
+
+  - name: "nix-channel --update"
+    command:
+      argv:
+      - nix-channel
+      - --update
     register: channel_update
     changed_when: (channel_update.stdout + channel_update.stderr).strip() != 'unpacking channels...'
 
-  - when: channel_update.changed or old_configuration.stat.checksum != candidate_configuration.checksum
+  - when: True
     block:
+    - name: ensure old files are deleted
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+      - result
+      - /boot/old
+
     - name: build candidate configuration
       include_role:
         name: cmd
@@ -32,7 +78,7 @@
         argv:
         - nixos-rebuild
         - -I
-        - "{{ candidate_configuration.dest }}"
+        - "nixos-config={{ nixos_configuration_candidate_dir }}/configuration.nix"
         - build
 
     - name: activate candidate configuration
@@ -42,7 +88,7 @@
         argv:
         - nixos-rebuild
         - -I
-        - "{{ candidate_configuration.dest }}"
+        - "nixos-config={{ nixos_configuration_candidate_dir }}/configuration.nix"
         - test
 
     - name: make the new configuration boot default
@@ -52,14 +98,14 @@
         argv:
         - nixos-rebuild
         - -I
-        - "{{ candidate_configuration.dest }}"
+        - "nixos-config={{ nixos_configuration_candidate_dir }}/configuration.nix"
         - switch
 
     - name: store as new configuration
       copy:
         dest: "{{ nixos_configuration_dir }}/configuration.nix"
         remote_src: true
-        src: "{{ candidate_configuration.dest }}"
+        src: "{{ nixos_configuration_candidate_dir }}/configuration.nix"
         force: true
         backup: true
       register: new_configuration
@@ -79,4 +125,4 @@
         - nix-channel
         - --rollback
     - name: fail after update rollback
-      fail: {}
+      fail: { }

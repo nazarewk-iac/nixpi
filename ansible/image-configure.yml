@@ -1,0 +1,71 @@
+- hosts: image-builder
+  gather_facts: false
+  vars:
+    nixos_configuration_candidate_dir: "{{ builder_dir }}/config/conf.d"
+    nixpkgs_branch: release-20.09
+
+  tasks:
+  - name: 'Check out the builder repo'
+    git:
+      repo: 'https://github.com/Robertof/nixos-docker-sd-image-builder.git'
+      dest: "{{ builder_dir }}"
+      version: master
+      force: true
+
+  - name: 'apply config/sd-image.nix replacements'
+    replace:
+      path: "{{ '/'.join([builder_dir, (item.file | default('config/sd-image.nix'))]) }}"
+      regexp: "{{ item.search }}"
+      replace: "{{ item.replacement }}"
+    loop:
+    #    - search: 'extraUsers\.\w+'
+    #      replacement: "extraUsers.{{ ssh_username }}"
+    - search: '\.extraUsers\.'
+      replacement: ".users."
+    - search: '"ssh-[^"]*"'
+      replacement: "{{ ssh_keys | map('regex_replace', '^(.*)$', '\"\\1\"') | join(' ') }}"
+    - search: '\./rpi3'
+      replacement: './rpi4'
+    - search: 'lib, \.\.\.'
+      replacement: 'config, pkgs, lib, ...'
+    - search: 'services\.sshd\.enabled'
+      replacement: 'services.openssh.enable'
+    - search: 'firmwareSize.*=.*\d+;'
+      replacement: 'firmwareSize = 1024;'
+      file: 'config/rpi4/default.nix'
+    - search: 'NIXPKGS_BRANCH: \S+'
+      replacement: 'NIXPKGS_BRANCH: "{{ nixpkgs_branch }}"'
+      file: 'docker/docker-compose.yml'
+
+  - name: 'ensure config/sd-image.nix lines'
+    lineinfile:
+      path: "{{ '/'.join([builder_dir, (item.file | default('config/sd-image.nix'))]) }}"
+      insertafter: "{{ item.insertafter | default('sdImage.compressImage') }}"
+      line: "{{ item.line }}"
+      regexp: "{{ item.line.split('=')[0].replace('.', '\\.') }}"
+    loop:
+    - line: 'services.timesyncd.enable = true;'
+    - line: '    ./conf.d/users.nix'
+      insertafter: 'imports = \['
+    - line: "environment.systemPackages = with pkgs; [ python39 ];"
+
+  - name: "ensure {{ nixos_configuration_candidate_dir }}"
+    file:
+      state: "{{ item }}"
+      dest: "{{ nixos_configuration_candidate_dir }}"
+      force: true
+    loop:
+    - absent
+    - directory
+
+  - name: "render {{ source_configs_dir }} to {{ nixos_configuration_candidate_dir }}"
+    template:
+      dest: "{{ nixos_configuration_candidate_dir }}/{{ item }}"
+      src: "{{ source_configs_dir }}/{{ item }}"
+      force: true
+    loop:
+    - users.nix
+
+  - name: display differences
+    debug:
+      msg: "{{ lookup('pipe', 'cd {} && git add . && git diff --color --staged --cached || true'.format(builder_dir) ) }}"

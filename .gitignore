@@ -84,3 +84,4 @@ fabric.properties
 .history/
 
 /*venv/
+/nixos-docker-sd-image-builder

@@ -28,7 +28,7 @@
     raspberrypi-tools
     k3s
     iptables
-    (python39.withPackages (ps: with ps; [ pip ipython requests ]))
+    (python39.withPackages (ps: with ps; [ pip requests ]))
   ];
 
   programs = {

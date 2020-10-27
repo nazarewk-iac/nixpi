@@ -21,7 +21,7 @@ deploy:
 clean:
 	pushd "$(BUILDER_DIR)"
 	./run.sh rm --force
-	docker image rm $(shell ./run.sh images -q)
+	docker image rm docker_build-nixos || true
 	popd
 	rm -rf "$(BUILDER_DIR)"
 

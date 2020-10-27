@@ -16,14 +16,11 @@
       argv:
       - nixos-generate-config
 
-  - name: "ensure {{ nixos_configuration_candidate_dir }}"
+  - name: "ensure {{ nixos_configuration_candidate_dir }} exists"
     file:
-      state: "{{ item }}"
+      state: "directory"
       dest: "{{ nixos_configuration_candidate_dir }}"
       force: true
-    loop:
-    - absent
-    - directory
 
   - name: "render {{ source_configs_dir }} to {{ nixos_configuration_candidate_dir }}"
     template:
@@ -32,6 +29,7 @@
       force: true
       validate: "nix-instantiate --parse-only '%s'"
     loop: "{{ source_config_files }}"
+    register: rendered_configs
 
   - name: "check nixos channel"
     command:
@@ -49,7 +47,7 @@
       - "{{ item.url }}"
       - "{{ item.name }}"
     when: |-
-      "{{ item.name }} {{ item.url }}" not in old_channels.stdout_lines
+      '{} {}'.format(item.name, item.url) not in old_channels.stdout_lines
     loop:
     - { name: nixos , url: "https://nixos.org/channels/{{ nixos_channel }}" }
 
@@ -91,32 +89,6 @@
         - "nixos-config={{ nixos_configuration_candidate_dir }}/configuration.nix"
         - test
 
-    - name: make the new configuration boot default
-      include_role:
-        name: cmd
-      vars:
-        argv:
-        - nixos-rebuild
-        - -I
-        - "nixos-config={{ nixos_configuration_candidate_dir }}/configuration.nix"
-        - switch
-
-    - name: store as new configuration
-      copy:
-        dest: "{{ nixos_configuration_dir }}/configuration.nix"
-        remote_src: true
-        src: "{{ nixos_configuration_candidate_dir }}/configuration.nix"
-        force: true
-        backup: true
-      register: new_configuration
-
-    - name: symlink old configuration to configuration.previous.nix
-      file:
-        state: link
-        dest: "{{ nixos_configuration_dir }}/configuration.previous.nix"
-        src: "{{ new_configuration.backup_file }}"
-        force: true
-
     rescue:
     - name: rollback channel update
       when: channel_update.changed
@@ -126,3 +98,40 @@
         - --rollback
     - name: fail after update rollback
       fail: { }
+
+  - name: make the new configuration boot default
+    include_role:
+      name: cmd
+    vars:
+      argv:
+      - nixos-rebuild
+      - -I
+      - "nixos-config={{ nixos_configuration_candidate_dir }}/configuration.nix"
+      - switch
+
+  - name: get current nixos system generation
+    stat:
+      path: /nix/var/nix/profiles/system
+    register: nixos_current_generation
+
+  - name: create new configuration directory
+    file:
+      state: "directory"
+      dest: "{{ nixos_configuration_dir }}/configuration.d/{{ nixos_current_generation.stat.lnk_target }}"
+      force: true
+    register: nixos_new_configuration_dir
+
+  - name: copy-over configuration files
+    copy:
+      remote_src: true
+      src: "{{ nixos_configuration_candidate_dir }}/{{ item.item }}"
+      dest: "{{ nixos_new_configuration_dir.path }}/{{ item.item }}"
+    loop: "{{ rendered_configs.results }}"
+
+  - name: link as a new configuration
+    file:
+      state: link
+      src: "{{ nixos_new_configuration_dir.path }}/configuration.nix"
+      dest: "{{ nixos_configuration_dir }}/configuration.nix"
+      force: true
+    register: new_configuration

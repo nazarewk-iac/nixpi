@@ -7,7 +7,7 @@
     ./ssh.nix
   ];
 
-  networking.hostName = "{{ ansible_hostname }}";
+  networking.hostName = "{{ nixos_hostname }}";
   networking.firewall = {
     allowedTCPPorts = [
       5000 # nix-serve

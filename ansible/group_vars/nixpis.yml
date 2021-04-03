@@ -1,4 +1,5 @@
 ansible_python_interpreter: /run/current-system/sw/bin/python
+nixos_hostname: "{{ inventory_hostname }}"
 nixos_channel: 'nixos-20.09'
 nixos_system_state_version: '20.09'
 nixos_configuration_dir: /etc/nixos

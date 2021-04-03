@@ -1,3 +1,2 @@
-ansible_hostname: nixpi
 ansible_connection: local
 builder_dir: "{{ cwd }}/nixos-docker-sd-image-builder"

@@ -1,7 +1,7 @@
 cwd: "{{ playbook_dir | realpath | dirname }}"
 source_configs_dir: "{{ cwd }}/nixos"
 # lookup('filetree', configs_dir) can return a dictionary without wrapping list
-source_config_files: "{{ [lookup('filetree', source_configs_dir)] | flatten | map(attribute='path') | select('match', '.*\\.nix$') | list }}"
+source_config_files: "{{ lookup('filetree', source_configs_dir, wantlist=True) | map(attribute='path') | select('match', '.*\\.nix$') | list }}"
 
 ssh_username: nazarewk
 ssh_keys:

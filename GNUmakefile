@@ -1,3 +1,7 @@
+SHELL := $(shell which bash)
+.SHELLFLAGS := -xeEuo pipefail -c
+.ONESHELL:
+
 NIXOS_VERSION = 20.09
 
 BUILDER_DIR = nixos-docker-sd-image-builder
@@ -5,7 +9,12 @@ CONFIGURED_FLAG = $(BUILDER_DIR)/.configured
 TARGET_IMAGE = $(BUILDER_DIR)/nixos-sd-image-$(NIXOS_VERSION)pre-git-aarch64-linux.img
 NIXPKGS_BRANCH = release-$(NIXOS_VERSION)
 
-.ONESHELL:
+MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+MAKEFILE_DIR := $(dir $(MAKEFILE_PATH))
+export PATH := ${MAKEFILE_PATH}/.venv/bin:${PATH}
+
+.PHONY: mount umount
+.PHONY: debug-* deploy clean bake image image-configure
 
 all: debug-remote
 
@@ -44,17 +53,16 @@ image-configure: "$(CONFIGURED_FLAG)"
 	touch "$(CONFIGURED_FLAG)"
 
 .venv:
+	rm -rf .venv
 	python3 -m venv .venv
 
 .venv/bin/ansible-playbook: .venv
 	. .venv/bin/activate
 	pip install -U -r requirements.txt
 
-.PHONY: mount
 mount: $(TARGET_IMAGE)
 	mkdir -p ./mnt-new
 	./bin/img mount $(TARGET_IMAGE) ./mnt-new
 
-.PHONY: umount
 umount:
 	./bin/img umount $(TARGET_IMAGE)

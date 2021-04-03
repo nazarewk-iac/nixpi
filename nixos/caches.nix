@@ -4,7 +4,7 @@
   services.nix-serve = {
     enable = true;
     port = 5000;
-    secretKeyFile = "/var/{{ ansible_hostname }}-0-priv-key.pem";
+    secretKeyFile = "/var/{{ nixos_hostname }}-0-priv-key.pem";
   };
   nix.binaryCaches = [ {{ other_caches | join(' ') }} ];
   nix.trustedBinaryCaches = [ {{ other_caches | join(' ') }} ];
